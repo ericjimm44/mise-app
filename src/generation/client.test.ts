@@ -63,6 +63,14 @@ describe('createRecipeModelClient', () => {
     expect(outputConfig?.format?.type).toBe('json_schema');
     expect(outputConfig?.format?.schema).toBeDefined();
     expect(outputConfig?.format?.schema?.['type']).toBe('object');
+
+    // zodOutputFormat attaches a `parse` closure so the SDK can populate
+    // `parsed_output`. It must not survive serialisation into the request body —
+    // an unexpected key inside `output_config.format` is a 400.
+    const onTheWire = JSON.parse(JSON.stringify(outputConfig)) as {
+      format: Record<string, unknown>;
+    };
+    expect(Object.keys(onTheWire.format).sort()).toEqual(['schema', 'type']);
   });
 
   it('never prefills the assistant turn', async () => {

@@ -4,8 +4,9 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { RecipeSchema } from '@contract/recipe.schema';
 import { MAX_TOKENS, MODEL } from './config';
-import { recipeOutputFormat } from './output-format';
 
 /** A system prompt block. `cache_control` marks the end of the stable prefix. */
 export interface SystemBlock {
@@ -108,7 +109,15 @@ export function createRecipeModelClient(
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system: request.system,
-        output_config: { format: recipeOutputFormat() },
+        // Structured outputs, enforced at the schema level. We do not ask for
+        // JSON in prose and then parse defensively — the schema IS the
+        // constraint, and it is derived from the contract's RecipeSchema so
+        // there is exactly one definition of the recipe shape.
+        //
+        // This only guarantees SHAPE. `parseAndValidate()` in generate.ts still
+        // runs afterwards: structured outputs cannot know this cook's inventory
+        // or exclusion list, and those are the whole point.
+        output_config: { format: zodOutputFormat(RecipeSchema) },
         messages: [{ role: 'user', content: request.userPrompt }],
       };
 

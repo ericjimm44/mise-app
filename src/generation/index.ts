@@ -36,13 +36,6 @@ export {
 export type { AmbitionRules, UserPromptOptions } from './prompt';
 
 export {
-  RECIPE_JSON_SCHEMA,
-  recipeOutputFormat,
-  zodV3ToJsonSchema,
-} from './output-format';
-export type { JsonSchema, RecipeOutputFormat } from './output-format';
-
-export {
   DEFAULT_MAX_ATTEMPTS,
   FORBIDDEN_REQUEST_FIELDS,
   MAX_TOKENS,
