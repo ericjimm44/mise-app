@@ -73,7 +73,7 @@ export const PROVE: RecipeStep = {
   timer_type: 'passive',
   can_start_next_step_during: true,
   doneness_cue: 'A floured finger leaves a dent that springs back only halfway.',
-  failure_mode: 'Left too long it overproofs, and the structure collapses in the oven.',
+  failure_mode: 'Left too long it overproofs, and the crumb turns coarse and sour.',
   chef_note: 'Warmth is a dial on time, not a shortcut past it.',
 };
 

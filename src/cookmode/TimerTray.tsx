@@ -40,7 +40,15 @@ export function TimerTray(props: TimerTrayProps) {
     >
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {timers.map((timer) => (
-          <TimerRow key={timer.id} timer={timer} now={now} {...props} />
+          <TimerRow
+            key={timer.id}
+            timer={timer}
+            now={now}
+            onPause={props.onPause}
+            onResume={props.onResume}
+            onDismiss={props.onDismiss}
+            onExtend={props.onExtend}
+          />
         ))}
       </ul>
     </section>
