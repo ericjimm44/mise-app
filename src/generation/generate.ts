@@ -87,6 +87,19 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
 }
 
+/**
+ * Read the signal through a function rather than inline.
+ *
+ * `opts.signal?.aborted === true` inline would be narrowed by the compiler to
+ * `false | undefined` after the pre-attempt guard below, because control-flow
+ * analysis assumes the property cannot have changed. It can: the caller aborts
+ * mid-request. Behind a call, the value is re-read at the point of use, which is
+ * both what we want at runtime and what type-checks.
+ */
+function isAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
 export async function generateRecipe(
   req: GenerationRequest,
   opts: GenerateOptions = {},
@@ -108,7 +121,7 @@ export async function generateRecipe(
   while (attempt < maxAttempts) {
     attempt += 1;
 
-    if (opts.signal?.aborted === true) {
+    if (isAborted(opts.signal)) {
       rejections.push({
         reason: 'malformed_json',
         detail: `${ABORTED_DETAIL_PREFIX} generation was aborted before attempt ${attempt}`,
@@ -175,7 +188,7 @@ export async function generateRecipe(
 
       parsedOutput = result.parsedOutput;
     } catch (error) {
-      if (isAbortError(error) || opts.signal?.aborted === true) {
+      if (isAbortError(error) || isAborted(opts.signal)) {
         rejections.push({
           reason: 'malformed_json',
           detail: `${ABORTED_DETAIL_PREFIX} ${errorMessage(error)}`,
