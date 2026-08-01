@@ -15,7 +15,10 @@
  * a "you may need to buy" note. That shrug is the product's death.
  */
 
-import { z } from 'zod';
+// zod/v4 (NOT bare 'zod', which is the v3 classic API on zod 3.x). The
+// Anthropic SDK's zodOutputFormat imports zod/v4; a v3-built schema compiles
+// but throws at runtime. Guarded by a contract test — do not "simplify" this.
+import { z } from 'zod/v4';
 import { TECHNIQUE_IDS } from './techniques';
 import type {
   Exclusion,

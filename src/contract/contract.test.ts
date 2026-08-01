@@ -10,10 +10,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { TECHNIQUES, TECHNIQUE_IDS, getTechnique } from './techniques';
 import {
   BANNED_CLAIM_PATTERNS,
   DEFAULT_EXCLUSIONS,
+  RecipeSchema,
   containsTerm,
   normalize,
   parseAndValidate,
@@ -503,6 +505,39 @@ describe('schema shape', () => {
     // Active and passive are reported separately and never summed away.
     expect(Object.keys(r.time)).toContain('active_minutes');
     expect(Object.keys(r.time)).toContain('passive_minutes');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Structured outputs
+// ---------------------------------------------------------------------------
+
+/**
+ * REGRESSION GUARD.
+ *
+ * `RecipeSchema` must stay compatible with the Anthropic SDK's
+ * `zodOutputFormat`, which imports `zod/v4`. Building the schema with the v3
+ * classic API (`import { z } from 'zod'`) compiles but throws at runtime with
+ * "Cannot read properties of undefined (reading 'def')" — a failure that
+ * surfaces only on a live API call, i.e. in the kitchen rather than in CI.
+ *
+ * Found by Agent A during the Phase 4 build, which reported it rather than
+ * working around it. That is the contract process working as designed.
+ */
+describe('structured outputs compatibility', () => {
+  it('converts to a json_schema output format without throwing', () => {
+    const format = zodOutputFormat(RecipeSchema);
+    expect(format.type).toBe('json_schema');
+  });
+
+  it('emits every top-level recipe field into the schema', () => {
+    const format = zodOutputFormat(RecipeSchema) as unknown as {
+      schema: { properties: Record<string, unknown> };
+    };
+    const emitted = Object.keys(format.schema.properties);
+    for (const key of Object.keys(RecipeSchema.shape)) {
+      expect(emitted, `"${key}" missing from the generated JSON Schema`).toContain(key);
+    }
   });
 });
 
