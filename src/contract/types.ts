@@ -225,7 +225,19 @@ export interface Recipe {
 export interface InventoryItem {
   id: string;
   name: string;
-  /** Normalised lowercase singular, for matching. Derived, never user-typed. */
+  /**
+   * Matching key. Derived, never user-typed — always the output of
+   * `normalize()` from `recipe.schema.ts`, so both sides of every comparison
+   * run through the same function.
+   *
+   * It lowercases, strips accents and punctuation, and collapses whitespace.
+   * It does NOT singularise: "chicken thighs" normalises to "chicken thighs",
+   * not "chicken thigh". Plurals are handled downstream instead — by
+   * `containsTerm()`'s optional `(es|s)?` suffix and by `isAvailable()`
+   * matching in both directions. Do not add singularisation here; that would
+   * make this key diverge from what the validator computes, and Rule 1 would
+   * start rejecting recipes for ingredients the cook actually has.
+   */
   normalized: string;
   quantity?: string;
   category?: IngredientCategory;
