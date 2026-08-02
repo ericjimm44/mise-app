@@ -388,6 +388,86 @@ export async function rebuildDerivedState(database: Db = defaultDb): Promise<voi
 }
 
 // ---------------------------------------------------------------------------
+// The repository — one named surface for the rest of the app
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything the rest of Mise may do to the cookbook tables, as one interface.
+ *
+ * The free functions above are the implementation and stay exported for tests
+ * and for callers that already hold a database; this is the surface other
+ * modules bind to. It exists for two reasons:
+ *
+ *   - Integration. Agent C's inventory repository covers `inventory`,
+ *     `pantryStaples`, `exclusions` and `settings`; this covers the other four
+ *     plus export/import across all eight. Two named interfaces reconcile at
+ *     merge; two piles of loose functions do not.
+ *   - Substitutability. A caller that takes a `CookbookRepository` can be handed
+ *     one bound to a test database without knowing that Dexie exists.
+ *
+ * Note what is absent and will stay absent: there is no `updateSavedRecipe`.
+ */
+export interface CookbookRepository {
+  saveRecipe(input: SaveRecipeInput): Promise<SavedRecipe>;
+  getSavedRecipe(id: string): Promise<SavedRecipe | undefined>;
+  listSavedRecipes(): Promise<SavedRecipe[]>;
+  countSavedRecipes(): Promise<number>;
+  deleteSavedRecipe(id: string): Promise<void>;
+  /** Does the stored snapshot still hash to what it hashed to at save time? */
+  findDriftedRecipes(): Promise<SavedRecipe[]>;
+
+  logCook(input: CookLogInput): Promise<CookLog>;
+  listCookLogsFor(savedRecipeId: string): Promise<CookLog[]>;
+  listRecentCookLogs(limit?: number): Promise<CookLog[]>;
+  countCooks(): Promise<number>;
+  cookCountsByRecipe(): Promise<ReadonlyMap<string, number>>;
+
+  /** For `GenerationRequest.techniqueProgress`. */
+  listTechniqueProgress(): Promise<TechniqueProgress[]>;
+  listOwnedTechniques(): Promise<TechniqueProgress[]>;
+  listStartedTechniques(): Promise<TechniqueProgress[]>;
+  getTechniqueGrid(): Promise<FamilyGroup[]>;
+
+  getCalibration(): Promise<DifficultyCalibration>;
+  /** For `GenerationRequest.calibration` — `undefined` below the sample floor. */
+  getApplicableCalibration(): Promise<DifficultyCalibration | undefined>;
+
+  /** Recompute progression and calibration from the surviving cook history. */
+  rebuildDerivedState(): Promise<void>;
+}
+
+/** Bind the repository to a database. Tests pass their own; the app uses the default. */
+export function createCookbookRepository(database: Db = defaultDb): CookbookRepository {
+  return {
+    saveRecipe: (input) => saveRecipe(input, database),
+    getSavedRecipe: (id) => getSavedRecipe(id, database),
+    listSavedRecipes: () => listSavedRecipes(database),
+    countSavedRecipes: () => countSavedRecipes(database),
+    deleteSavedRecipe: (id) => deleteSavedRecipe(id, database),
+    findDriftedRecipes: () => findDriftedRecipes(database),
+
+    logCook: (input) => logCook(input, database),
+    listCookLogsFor: (id) => listCookLogsFor(id, database),
+    listRecentCookLogs: (limit) => listRecentCookLogs(limit, database),
+    countCooks: () => countCooks(database),
+    cookCountsByRecipe: () => cookCountsByRecipe(database),
+
+    listTechniqueProgress: () => listTechniqueProgress(database),
+    listOwnedTechniques: () => listOwnedTechniques(database),
+    listStartedTechniques: () => listStartedTechniques(database),
+    getTechniqueGrid: () => getTechniqueGrid(database),
+
+    getCalibration: () => getCalibration(database),
+    getApplicableCalibration: () => getApplicableCalibration(database),
+
+    rebuildDerivedState: () => rebuildDerivedState(database),
+  };
+}
+
+/** The app's instance, bound to the singleton database in `@contract/db`. */
+export const cookbookRepository: CookbookRepository = createCookbookRepository();
+
+// ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
 

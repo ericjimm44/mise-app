@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MiseDatabase, SINGLETON_ID, contentHash } from '@contract/db';
 import {
   countCooks,
+  createCookbookRepository,
   cookCountsByRecipe,
   deleteSavedRecipe,
   findDriftedRecipes,
@@ -19,6 +20,7 @@ import {
   verifySavedRecipe,
 } from './storage';
 import { MIN_CALIBRATION_SAMPLE } from './calibration';
+import { techniquesInRecipe } from './progression';
 import { SAMPLE_GENERATED_FROM, makeRecipe } from './fixtures';
 
 let db: MiseDatabase;
@@ -466,5 +468,112 @@ describe('deleting a recipe', () => {
     expect(calibration.sampleSize).toBe(1);
     expect(calibration.starBias).toBe(0);
     expect(calibration.activeMinuteRatio).toBe(1);
+  });
+});
+
+describe('no write path touches savedRecipes', () => {
+  /**
+   * The strongest form of the immutability claim available in a test: replace
+   * every mutating method on the table with a booby trap, then run the flows
+   * that a careless refactor would route through them. `saveRecipe` uses `add`,
+   * which is left alone — creating a snapshot is allowed; changing one is not.
+   */
+  it('never calls put, update or bulkPut on savedRecipes while logging a cook', async () => {
+    const saved = await saveRecipe(
+      { recipe: makeRecipe(), generatedFrom: SAMPLE_GENERATED_FROM },
+      db,
+    );
+
+    const trap = (name: string) => () => {
+      throw new Error(`savedRecipes.${name} must never be called`);
+    };
+    const table = db.savedRecipes as unknown as Record<string, unknown>;
+    const original = {
+      put: table['put'],
+      update: table['update'],
+      bulkPut: table['bulkPut'],
+      bulkUpdate: table['bulkUpdate'],
+    };
+    table['put'] = trap('put');
+    table['update'] = trap('update');
+    table['bulkPut'] = trap('bulkPut');
+    table['bulkUpdate'] = trap('bulkUpdate');
+
+    try {
+      await logCook(
+        {
+          savedRecipeId: saved.id,
+          wouldMakeAgain: false,
+          actualDifficulty: 5,
+          actualActiveMinutes: 90,
+          notes: 'Nothing here may find its way back onto the recipe.',
+          techniquesPerformed: ['maillard_sear'],
+        },
+        db,
+      );
+      await getSavedRecipe(saved.id, db);
+      await listSavedRecipes(db);
+      await getTechniqueGrid(db);
+    } finally {
+      Object.assign(table, original);
+    }
+
+    const after = await getSavedRecipe(saved.id, db);
+    expect(verifySavedRecipe(after!)).toBe(true);
+    expect(after!.contentHash).toBe(saved.contentHash);
+  });
+});
+
+describe('techniquesInRecipe', () => {
+  it('offers the techniques a recipe teaches, from its skills and its steps', () => {
+    expect(techniquesInRecipe(makeRecipe())).toEqual(['maillard_sear', 'pan_sauce']);
+  });
+
+  it('drops ids that are not in the contract library', () => {
+    const recipe = makeRecipe({
+      skills_required: [{ technique_id: 'not_a_technique', name: 'Nope', level: 1 }],
+    });
+    expect(techniquesInRecipe(recipe)).toEqual(['maillard_sear', 'pan_sauce']);
+  });
+});
+
+describe('the repository surface', () => {
+  it('binds every read and write to the database it was created with', async () => {
+    const repo = createCookbookRepository(db);
+
+    const saved = await repo.saveRecipe({
+      recipe: makeRecipe(),
+      generatedFrom: SAMPLE_GENERATED_FROM,
+    });
+    await repo.logCook({
+      savedRecipeId: saved.id,
+      wouldMakeAgain: true,
+      actualDifficulty: 2,
+      actualActiveMinutes: 45,
+      techniquesPerformed: ['maillard_sear'],
+    });
+
+    expect(await repo.countSavedRecipes()).toBe(1);
+    expect(await repo.countCooks()).toBe(1);
+    expect((await repo.listSavedRecipes())[0]!.id).toBe(saved.id);
+    expect((await repo.getSavedRecipe(saved.id))!.contentHash).toBe(saved.contentHash);
+    expect(await repo.listCookLogsFor(saved.id)).toHaveLength(1);
+    expect(await repo.listRecentCookLogs()).toHaveLength(1);
+    expect((await repo.cookCountsByRecipe()).get(saved.id)).toBe(1);
+    expect(await repo.listTechniqueProgress()).toHaveLength(1);
+    expect(await repo.listStartedTechniques()).toHaveLength(1);
+    expect(await repo.listOwnedTechniques()).toHaveLength(0);
+    expect(await repo.getTechniqueGrid()).toHaveLength(9);
+    expect((await repo.getCalibration()).sampleSize).toBe(1);
+    expect(await repo.getApplicableCalibration()).toBeUndefined();
+    expect(await repo.findDriftedRecipes()).toEqual([]);
+
+    await repo.rebuildDerivedState();
+    expect(await repo.listTechniqueProgress()).toHaveLength(1);
+
+    await repo.deleteSavedRecipe(saved.id);
+    expect(await repo.countSavedRecipes()).toBe(0);
+    expect(await repo.countCooks()).toBe(0);
+    expect(await repo.listTechniqueProgress()).toEqual([]);
   });
 });
