@@ -22,7 +22,7 @@ import {
   validateRecipe,
   type ValidationContext,
 } from './recipe.schema';
-import { contentHash, deepFreeze } from './db';
+import { MiseDatabase, contentHash, deepFreeze } from './db';
 import type { Recipe } from './types';
 
 // ---------------------------------------------------------------------------
@@ -538,6 +538,42 @@ describe('structured outputs compatibility', () => {
     for (const key of Object.keys(RecipeSchema.shape)) {
       expect(emitted, `"${key}" missing from the generated JSON Schema`).toContain(key);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dexie schema
+// ---------------------------------------------------------------------------
+
+/**
+ * REGRESSION GUARD.
+ *
+ * IndexedDB does not accept booleans as keys. Declaring a boolean property in
+ * a Dexie index compiles, stores fine, and silently omits every row from that
+ * index — then throws only when something queries it. This file shipped that
+ * mistake on `exclusions.enabled` and `pantryStaples.enabled`, with a comment
+ * recommending the exact query that throws.
+ *
+ * These tests pin both halves: the query genuinely fails, and the filter path
+ * we use instead genuinely works.
+ */
+describe('Dexie schema: no boolean indexes', () => {
+  it('confirms a boolean-keyed query throws, which is why enabled is unindexed', async () => {
+    const db = new MiseDatabase(`schema-probe-${Math.random().toString(36).slice(2)}`);
+    await db.exclusions.bulkAdd(DEFAULT_EXCLUSIONS.map((e) => ({ ...e })));
+    await expect(
+      db.exclusions.where('enabled').equals(true as never).toArray(),
+    ).rejects.toThrow();
+    db.close();
+  });
+
+  it('reads active exclusions by in-memory filter instead', async () => {
+    const db = new MiseDatabase(`schema-filter-${Math.random().toString(36).slice(2)}`);
+    await db.exclusions.bulkAdd(DEFAULT_EXCLUSIONS.map((e) => ({ ...e })));
+    const active = await db.exclusions.filter((e) => e.enabled).toArray();
+    // Seafood, and only seafood, ships enabled.
+    expect(active.map((e) => e.id)).toEqual(['seafood']);
+    db.close();
   });
 });
 

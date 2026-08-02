@@ -40,10 +40,23 @@ export class MiseDatabase extends Dexie {
     this.version(1).stores({
       // `normalized` is indexed because inventory matching queries on it.
       inventory: 'id, normalized, category, addedAt',
-      pantryStaples: 'id, normalized, enabled',
-      // `enabled` is indexed: the generator loads only active exclusions on
-      // every single generation, so this is the hottest read in the app.
-      exclusions: 'id, enabled',
+      // NOTE: `enabled` is deliberately NOT indexed on this table or on
+      // `exclusions`, even though both are queried by it.
+      //
+      // IndexedDB does not accept booleans as keys. A boolean-valued property
+      // named in a Dexie index is silently absent from that index, and
+      // `.where('enabled').equals(true)` throws at runtime:
+      //   "Data provided to an operation does not meet requirements."
+      //
+      // Filter in memory instead — `.filter((e) => e.enabled)` — which is the
+      // right call regardless: these tables hold single-digit to low-double-digit
+      // row counts, so a full scan is cheaper than an index lookup would be.
+      //
+      // (Earlier revisions of this file indexed `enabled` here and described the
+      // exclusions read as "the hottest read in the app". Both claims were
+      // wrong. Found by Agent D during the Phase 4 build.)
+      pantryStaples: 'id, normalized',
+      exclusions: 'id',
       settings: 'id',
       // `savedAt` indexed for the cookbook's reverse-chronological list.
       savedRecipes: 'id, savedAt',
